@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discord VC Attendance Tracker</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    /* same styles as before, omitted for brevity */
+  </style>
+</head>
+<body>
+  <h1>🎧 Discord VC Attendance Tracker</h1>
+  <div class="container">
+    <div class="panel">
+      <h2>🟢 Active Voice Chat Members</h2>
+      <table id="active">
+        <thead><tr><th>User</th><th>Channel</th><th>Duration</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>📜 Join/Leave History</h2>
+      <div id="history"></div>
+    </div>
+    <div class="panel">
+      <h2>🏆 Leaderboards</h2>
+      <button onclick="loadLeaderboard('daily')">Daily</button>
+      <button onclick="loadLeaderboard('weekly')">Weekly</button>
+      <button onclick="loadLeaderboard('all')">All Time</button>
+      <table id="leaderboard">
+        <thead><tr><th>User</th><th>VC Time</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <button onclick="exportXLSX('daily')">⬇️ Export Daily</button>
+      <button onclick="exportXLSX('weekly')">⬇️ Export Weekly</button>
+      <button onclick="exportXLSX('all')">⬇️ Export All Time</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let attendance = {};
+    const activeBody = document.querySelector("#active tbody");
+    const historyDiv = document.querySelector("#history");
+    const leaderboardBody = document.querySelector("#leaderboard tbody");
+
+    socket.on("update", (data) => {
+      attendance = data;
+      updateActive();
+      updateHistory();
+    });
+
+    function updateActive() {
+      activeBody.innerHTML = "";
+      const now = new Date();
+      for (const [user, info] of Object.entries(attendance.active || {})) {
+        const joined = new Date(info.joinedAt);
+        const duration = Math.floor((now - joined) / 1000);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${user}</td><td>${info.channel}</td><td>${formatDuration(duration)}</td>`;
+        activeBody.appendChild(tr);
+      }
+    }
+
+    function updateHistory() {
+      historyDiv.innerHTML = "";
+      (attendance.history || []).slice(0, 20).forEach(h => {
+        const div = document.createElement("div");
+        const time = new Date(h.time).toLocaleTimeString();
+        const typeClass = h.type === "join" ? "joined" : "left";
+        div.innerHTML = `<span class="${typeClass}">${h.user}</span> ${h.type} <b>${h.channel}</b> at ${time}`;
+        historyDiv.appendChild(div);
+      });
+    }
+
+    function loadLeaderboard(type) {
+      fetch(`/leaderboard/${type}`)
+        .then(res => res.json())
+        .then(list => {
+          leaderboardBody.innerHTML = "";
+          list.forEach(row => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${row.user}</td><td>${row.time}</td>`;
+            leaderboardBody.appendChild(tr);
+          });
+        });
+    }
+
+    function exportXLSX(type) {
+      window.open(`/export/xlsx/${type}`, "_blank");
+    }
+
+    function formatDuration(sec) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`;
+    }
+
+    setInterval(updateActive, 1000);
+  </script>
+</body>
+</html>
